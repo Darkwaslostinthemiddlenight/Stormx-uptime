@@ -36,21 +36,21 @@ async def handle_add_site(self, request):
     user = await self.get_current_user(request)
     if not user:
         return web.json_response({'success': False, 'error': 'Not authenticated'}, status=401)
-    
+
     data = await request.json()
     if any(site.url == data['url'] for site in user.monitors):
         return web.json_response({'success': False, 'error': 'Site already exists'})
-    
+
     user.monitors.append(MonitoredSite(
         name=data['name'],
         url=data['url'],
         interval=int(data['interval'])
     ))
     self.save_users()
-    
+
     # Perform initial check
     status = await self.check_site(user, user.monitors[-1])
-    return web.json_respons
+    return web.json_response({'success': True, 'status': status})
 
 class UptimeMonitor:
     def __init__(self):
