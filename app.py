@@ -1,6 +1,3 @@
-# ✅ Full fixed code with working 'handle_add_site' method and unified UptimeMonitor class
-
-# Imports
 import asyncio
 from aiohttp import web, ClientSession
 import time
@@ -14,10 +11,11 @@ import os
 from aiohttp_session import setup, get_session, session_middleware
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 
-# Configuration
-COOKIE_SECRET = secrets.token_bytes(32)
+# --- CONFIGURATION ---
+COOKIE_SECRET = secrets.token_bytes(32)  # In production use a fixed secret.
 DB_FILE = "users.db"
 
+# --- DATA MODELS ---
 @dataclass
 class User:
     username: str
@@ -33,6 +31,7 @@ class MonitoredSite:
     interval: int
     paused: bool = False
 
+# --- UPTIME MONITOR CLASS ---
 class UptimeMonitor:
     def __init__(self):
         self.users: Dict[str, User] = {}
@@ -51,7 +50,7 @@ class UptimeMonitor:
             web.post('/signup', self.handle_signup),
             web.get('/logout', self.handle_logout),
             web.post('/add_site', self.handle_add_site),
-            # Add other handlers if needed
+            # You can add more routes (e.g., check_now, pause_site) as needed.
         ])
 
     def load_users(self):
@@ -99,13 +98,15 @@ class UptimeMonitor:
         return self.users.get(username) if username else None
 
     async def monitor_sites(self):
+        # In a real app you'd check each site's interval and update accordingly.
         while True:
             tasks = []
             for user in self.users.values():
                 for site in user.monitors:
                     if not site.paused:
                         tasks.append(self.check_site(user, site))
-            await asyncio.gather(*tasks)
+            if tasks:
+                await asyncio.gather(*tasks)
             await asyncio.sleep(10)
 
     async def check_site(self, user: User, site: MonitoredSite):
@@ -137,7 +138,6 @@ class UptimeMonitor:
                 'last_status': status,
                 'paused': site.paused
             }
-
         record = user.status_data[site.url]
         record['history'].append({
             'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -146,30 +146,129 @@ class UptimeMonitor:
         })
         if len(record['history']) > 100:
             record['history'].pop(0)
-
         record['total_checks'] += 1
         if status == 'up':
             record['up_count'] += 1
         else:
             record['down_count'] += 1
-
         record['uptime_percent'] = round((record['up_count'] / record['total_checks']) * 100, 2)
         record['last_checked'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         record['response_time'] = response_time
         record['last_status'] = status
         record['paused'] = site.paused
-        successful = [r['response_time'] for r in record['history'] if r['status'] == 'up']
-        record['avg_response_time'] = round(sum(successful) / len(successful), 2) if successful else 0
+        successes = [r['response_time'] for r in record['history'] if r['status'] == 'up']
+        record['avg_response_time'] = round(sum(successes) / len(successes), 2) if successes else 0
         self.save_users()
 
+    # --- HANDLER METHODS ---
+
     async def handle_index(self, request):
-        return web.Response(text="Storm X Uptime Monitor Running!", content_type="text/plain")
+        """Dashboard: if logged in, show monitored sites and a form to add new sites."""
+        user = await self.get_current_user(request)
+        if not user:
+            raise web.HTTPFound('/login')
+        # Build an HTML dashboard with a table of monitors and an add-site form.
+        html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - Storm X Uptime Monitor</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+        table {{ border-collapse: collapse; width: 100%; margin-bottom: 20px; }}
+        th, td {{ border: 1px solid #ccc; padding: 8px; text-align: left; }}
+        th {{ background-color: #eee; }}
+        form {{ margin-top: 20px; }}
+    </style>
+</head>
+<body>
+    <h1>Welcome, {user.username}!</h1>
+    <p><a href="/logout">Logout</a></p>
+    <h2>Your Monitored Sites</h2>
+    <table>
+      <tr>
+        <th>Name</th>
+        <th>URL</th>
+        <th>Status</th>
+        <th>Uptime (%)</th>
+        <th>Last Checked</th>
+      </tr>"""
+        # List monitors if any.
+        for site in user.monitors:
+            status_info = user.status_data.get(site.url, {})
+            status = status_info.get("last_status", "unknown")
+            uptime = status_info.get("uptime_percent", 0)
+            last = status_info.get("last_checked", "Never")
+            html += f"""
+      <tr>
+        <td>{site.name}</td>
+        <td>{site.url}</td>
+        <td>{status}</td>
+        <td>{uptime}%</td>
+        <td>{last}</td>
+      </tr>"""
+        html += """
+    </table>
+
+    <h2>Add New Site</h2>
+    <form method="post" action="/add_site">
+        <p>Name: <input type="text" name="name" required></p>
+        <p>URL: <input type="url" name="url" required></p>
+        <p>Interval (sec): <input type="number" name="interval" value="60" required></p>
+        <p><button type="submit">Add Site</button></p>
+    </form>
+</body>
+</html>"""
+        return web.Response(text=html, content_type="text/html")
 
     async def handle_login_page(self, request):
-        return web.Response(text="Login Page Placeholder", content_type="text/plain")
+        html = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Login - Storm X Uptime Monitor</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    form { max-width: 300px; margin: auto; }
+    input { display: block; width: 100%; margin-bottom: 10px; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Login</h1>
+  <form method="post" action="/login">
+    <input type="text" name="username" placeholder="Username" required>
+    <input type="password" name="password" placeholder="Password" required>
+    <button type="submit">Login</button>
+  </form>
+  <p>Don't have an account? <a href="/signup">Sign up</a></p>
+</body>
+</html>"""
+        return web.Response(text=html, content_type="text/html")
 
     async def handle_signup_page(self, request):
-        return web.Response(text="Signup Page Placeholder", content_type="text/plain")
+        html = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Sign Up - Storm X Uptime Monitor</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    form { max-width: 300px; margin: auto; }
+    input { display: block; width: 100%; margin-bottom: 10px; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Sign Up</h1>
+  <form method="post" action="/signup">
+    <input type="text" name="username" placeholder="Username" required>
+    <input type="password" name="password" placeholder="Password" required>
+    <input type="password" name="confirm_password" placeholder="Confirm Password" required>
+    <button type="submit">Sign Up</button>
+  </form>
+  <p>Already have an account? <a href="/login">Login</a></p>
+</body>
+</html>"""
+        return web.Response(text=html, content_type="text/html")
 
     async def handle_login(self, request):
         data = await request.post()
@@ -205,16 +304,23 @@ class UptimeMonitor:
         raise web.HTTPFound('/login')
 
     async def handle_add_site(self, request):
+        # This handler supports both POSTed form data and JSON.
         user = await self.get_current_user(request)
         if not user:
-            return web.json_response({'success': False, 'error': 'Not authenticated'}, status=401)
-        data = await request.json()
+            return web.Response(text="Not authenticated", status=401)
+        if request.content_type == 'application/json':
+            data = await request.json()
+        else:
+            data = await request.post()
         if any(site.url == data['url'] for site in user.monitors):
-            return web.json_response({'success': False, 'error': 'Site already exists'})
-        user.monitors.append(MonitoredSite(name=data['name'], url=data['url'], interval=int(data['interval'])))
+            return web.Response(text="Site already exists", status=400)
+        new_site = MonitoredSite(name=data['name'], url=data['url'], interval=int(data['interval']))
+        user.monitors.append(new_site)
         self.save_users()
-        status = await self.check_site(user, user.monitors[-1])
-        return web.json_response({'success': True, 'status': status})
+        # Perform initial check asynchronously
+        status = await self.check_site(user, new_site)
+        # After adding, redirect back to dashboard.
+        raise web.HTTPFound('/')
 
     async def start(self):
         runner = web.AppRunner(self.app)
@@ -224,11 +330,12 @@ class UptimeMonitor:
         await site.start()
         print("Server started at http://0.0.0.0:5000")
 
+# --- MAIN EXECUTION ---
 if __name__ == '__main__':
+    monitor = UptimeMonitor()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
-        monitor = UptimeMonitor()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
         loop.run_until_complete(monitor.start())
         loop.run_forever()
     except KeyboardInterrupt:
