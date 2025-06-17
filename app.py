@@ -43,6 +43,26 @@ class UptimeMonitor:
         self.setup_routes()
         self.monitor_task = None
 
+async def handle_add_site(self, request):
+    user = await self.get_current_user(request)
+    if not user:
+        return web.json_response({'success': False, 'error': 'Not authenticated'}, status=401)
+    
+    data = await request.json()
+    if any(site.url == data['url'] for site in user.monitors):
+        return web.json_response({'success': False, 'error': 'Site already exists'})
+    
+    user.monitors.append(MonitoredSite(
+        name=data['name'],
+        url=data['url'],
+        interval=int(data['interval'])
+    ))
+    self.save_users()
+    
+    # Perform initial check
+    status = await self.check_site(user, user.monitors[-1])
+    return web.json_response({'success': True, 'status': status})
+
     def setup_routes(self):
         self.app.add_routes([
             web.get('/', self.handle_index),
@@ -51,7 +71,7 @@ class UptimeMonitor:
             web.get('/signup', self.handle_signup_page),
             web.post('/signup', self.handle_signup),
             web.get('/logout', self.handle_logout),
-            web.post('/add_site', self.handle_add_site),
+            web.post('/add_site', self.handle_add_site),  # Make sure this matches the method name
             web.get('/status', self.handle_status),
             web.get('/status_updates', self.handle_status_updates),
             web.get('/site_details/{url}', self.handle_site_details),
@@ -59,7 +79,8 @@ class UptimeMonitor:
             web.post('/delete_site', self.handle_delete_site),
             web.post('/check_now', self.handle_check_now),
             web.static('/static', 'static')
-        ])
+    ])
+
 
     def load_users(self):
         if os.path.exists(DB_FILE):
