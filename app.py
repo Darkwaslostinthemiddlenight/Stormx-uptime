@@ -1,4 +1,5 @@
-from flask import Flask, render_template, render_template_string, request, redirect, url_for, flash, session, jsonify
+import os
+from flask import Flask, render_template_string, request, redirect, url_for, flash, session, jsonify
 from flask_bcrypt import Bcrypt
 from datetime import datetime, timedelta
 import sqlite3
@@ -7,13 +8,17 @@ import time
 import threading
 from werkzeug.security import generate_password_hash, check_password_hash
 import atexit
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'  # Change this in production!
+app.secret_key = os.environ.get('SECRET_KEY', 'fallback_secret_key')
 bcrypt = Bcrypt(app)
 
-# Database setup
-DATABASE = 'uptime_monitor.db'
+# Database setup - using absolute path
+DATABASE = os.path.join(os.path.dirname(__file__), 'uptime_monitor.db')
 
 def get_db():
     conn = sqlite3.connect(DATABASE)
@@ -1403,4 +1408,5 @@ def logout():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    app.run(host = '0.0.0.0',debug=True,port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
