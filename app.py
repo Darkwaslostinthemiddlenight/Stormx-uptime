@@ -162,7 +162,7 @@ def save_users(self):
         with open(DB_FILE, 'w') as f:
             json.dump(data, f)
             
-def hdef hash_password(self, password: str, salt: str) -> str:
+def hash_password(self, password: str, salt: str) -> str:
     return hashlib.pbkdf2_hmac(
         'sha256',
         password.encode('utf-8'),
@@ -175,16 +175,16 @@ async def get_current_user(self, request) -> Optional[User]:
     username = session.get('username')
     return self.users.get(username) if username else None
 
-    async def monitor_sites(self):
-        while True:
-            tasks = []
-            for user in self.users.values():
-                for site in user.monitors:
-                    if not site.paused:
-                        tasks.append(self.check_site(user, site))
-            
-            await asyncio.gather(*tasks)
-            await asyncio.sleep(10)  # Check every 10 seconds
+async def monitor_sites(self):
+    while True:
+        tasks = []
+        for user in self.users.values():
+            for site in user.monitors:
+                if not site.paused:
+                    tasks.append(self.check_site(user, site))
+        
+        await asyncio.gather(*tasks)
+        await asyncio.sleep(10)  # Check every 10 seconds
 
     async def check_site(self, user: User, site: MonitoredSite):
         try:
