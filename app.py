@@ -162,18 +162,18 @@ def save_users(self):
         with open(DB_FILE, 'w') as f:
             json.dump(data, f)
             
-def hash_password(self, password: str, salt: str) -> str:
-        return hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            salt.encode('utf-8'),
-            100000
-        ).hex()
+def hdef hash_password(self, password: str, salt: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        'sha256',
+        password.encode('utf-8'),
+        salt.encode('utf-8'),
+        100000
+    ).hex()
 
-    async def get_current_user(self, request) -> Optional[User]:
-        session = await get_session(request)
-        username = session.get('username')
-        return self.users.get(username) if username else None
+async def get_current_user(self, request) -> Optional[User]:
+    session = await get_session(request)
+    username = session.get('username')
+    return self.users.get(username) if username else None
 
     async def monitor_sites(self):
         while True:
