@@ -8,18 +8,15 @@ import time
 import threading
 from werkzeug.security import generate_password_hash, check_password_hash
 import atexit
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'fallback_secret_key')
+# Get secret key from environment variable or use a fallback (change this in production!)
+app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-please-change-me')
+
 bcrypt = Bcrypt(app)
 
 # Database setup - using absolute path
 DATABASE = os.path.join(os.path.dirname(__file__), 'uptime_monitor.db')
-
 def get_db():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
