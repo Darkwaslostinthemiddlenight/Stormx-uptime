@@ -32,28 +32,6 @@ class MonitoredSite:
 
 from aiohttp import web
 
-class UptimeMonitor:
-    def __init__(self):
-        self.app = web.Application()
-        self.users = {}  # or load from storage
-        self.monitor_task = None
-
-        # Example route
-        self.app.add_routes([
-            web.get('/', self.handle_home),
-        ])
-
-    async def handle_home(self, request):
-        return web.Response(text="Storm X Uptime Monitor Running!")
-
-    async def start(self):
-        runner = web.AppRunner(self.app)
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', 5000)
-        self.monitor_task = asyncio.create_task(self.monitor_sites())
-        await site.start()
-        print("Server started at http://0.0.0.0:5000")
-
 async def handle_add_site(self, request):
     user = await self.get_current_user(request)
     if not user:
@@ -72,7 +50,20 @@ async def handle_add_site(self, request):
     
     # Perform initial check
     status = await self.check_site(user, user.monitors[-1])
-    return web.json_response({'success': True, 'status': status})
+    return web.json_respons
+
+class UptimeMonitor:
+    def __init__(self):
+        self.users: Dict[str, User] = {}
+        self.load_users()
+
+        middlewares = [
+            session_middleware(EncryptedCookieStorage(COOKIE_SECRET))
+        ]
+        self.app = web.Application(middlewares=middlewares)
+
+        self.setup_routes()
+        self.monitor_task = None
 
     def setup_routes(self):
         self.app.add_routes([
@@ -82,7 +73,7 @@ async def handle_add_site(self, request):
             web.get('/signup', self.handle_signup_page),
             web.post('/signup', self.handle_signup),
             web.get('/logout', self.handle_logout),
-            web.post('/add_site', self.handle_add_site),  # Make sure this matches the method name
+            web.post('/add_site', self.handle_add_site),
             web.get('/status', self.handle_status),
             web.get('/status_updates', self.handle_status_updates),
             web.get('/site_details/{url}', self.handle_site_details),
@@ -90,13 +81,7 @@ async def handle_add_site(self, request):
             web.post('/delete_site', self.handle_delete_site),
             web.post('/check_now', self.handle_check_now),
             web.static('/static', 'static')
-    ])
-
-class UptimeMonitor:
-    def __init__(self):
-        self.users: Dict[str, User] = {}
-        self.load_users()  # This will now work if you add the method below
-        # ... rest of your __init__ code
+        ])
 
     def load_users(self):
         try:
@@ -117,7 +102,22 @@ class UptimeMonitor:
             print(f"Error loading users: {e}")
             self.users = {}
 
-            
+    def save_users(self):
+        try:
+            data = {
+                username: {
+                    'username': user.username,
+                    'password_hash': user.password_hash,
+                    'salt': user.salt,
+                    'monitors': [vars(m) for m in user.monitors],
+                    'status_data': user.status_data
+                }
+                for username, user in self.users.items()
+            }
+            with open(DB_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"Error saving users: {e}")
 
     def hash_password(self, password: str, salt: str) -> str:
         return hashlib.pbkdf2_hmac(
@@ -139,9 +139,9 @@ class UptimeMonitor:
                 for site in user.monitors:
                     if not site.paused:
                         tasks.append(self.check_site(user, site))
-            
+
             await asyncio.gather(*tasks)
-            await asyncio.sleep(10)  # Check every 10 seconds
+            await asyncio.sleep(10)
 
     async def check_site(self, user: User, site: MonitoredSite):
         try:
@@ -154,7 +154,7 @@ class UptimeMonitor:
             response_time = 0
             status = 'down'
             print(f"Error checking {site.url}: {str(e)}")
-        
+
         self.update_site_status(user, site, status, response_time)
         return status
 
@@ -173,33 +173,42 @@ class UptimeMonitor:
                 'last_status': status,
                 'paused': site.paused
             }
-        
+
         record = user.status_data[site.url]
         record['history'].append({
             'time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'status': status,
             'response_time': response_time
         })
-        
+
         if len(record['history']) > 100:
             record['history'].pop(0)
-        
+
         record['total_checks'] += 1
         if status == 'up':
             record['up_count'] += 1
         else:
             record['down_count'] += 1
-        
+
         record['uptime_percent'] = round((record['up_count'] / record['total_checks']) * 100, 2)
         record['last_checked'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         record['response_time'] = response_time
         record['last_status'] = status
         record['paused'] = site.paused
-        
-        successful_responses = [r['response_time'] for r in record['history'] if r['status'] == 'up']
-        record['avg_response_time'] = round(sum(successful_responses) / len(successful_responses), 2) if successful_responses else 0
-        
+
+        successful = [r['response_time'] for r in record['history'] if r['status'] == 'up']
+        record['avg_response_time'] = round(sum(successful) / len(successful), 2) if successful else 0
+
         self.save_users()
+
+    async def start(self):
+        runner = web.AppRunner(self.app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 5000)
+        self.monitor_task = asyncio.create_task(self.monitor_sites())
+        await site.start()
+        print("Server started at http://0.0.0.0:5000")
+
 
     async def handle_index(self, request):
         user = await self.get_current_user(request)
@@ -2301,3 +2310,4 @@ if __name__ == '__main__':
         loop.run_forever()
     except KeyboardInterrupt:
         print("Server stopped")
+
