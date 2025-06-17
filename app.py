@@ -81,8 +81,54 @@ async def handle_add_site(self, request):
             web.static('/static', 'static')
     ])
 
+class UptimeMonitor:
+    def __init__(self):
+        self.users: Dict[str, User] = {}
+        self.load_users()  # This will now work if you add the method below
+        # ... rest of your __init__ code
 
     def load_users(self):
+        try:
+            if os.path.exists(DB_FILE):
+                with open(DB_FILE, 'r') as f:
+                    data = json.load(f)
+                    self.users = {
+                        username: User(
+                            username=user['username'],
+                            password_hash=user['password_hash'],
+                            salt=user['salt'],
+                            monitors=[MonitoredSite(**m) for m in user.get('monitors', [])],
+                            status_data=user.get('status_data', {})
+                        )
+                        for username, user in data.items()
+                    }
+        except Exception as e:
+            print(f"Error loading users: {e}")
+            self.users = {}
+
+    def save_users(self):
+        try:
+            data = {
+                username: {
+                    'username': user.username,
+                    'password_hash': user.password_hash,
+                    'salt': user.salt,
+                    'monitors': [{
+                        'name': m.name,
+                        'url': m.url,
+                        'interval': m.interval,
+                        'paused': m.paused
+                    } for m in user.monitors],
+                    'status_data': user.status_data
+                }
+                for username, user in self.users.items()
+            }
+            with open(DB_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            print(f"Error saving users: {e}")
+
+def load_users(self):
         if os.path.exists(DB_FILE):
             with open(DB_FILE, 'r') as f:
                 data = json.load(f)
@@ -97,7 +143,7 @@ async def handle_add_site(self, request):
                     for username, user in data.items()
                 }
 
-    def save_users(self):
+def save_users(self):
         data = {
             username: {
                 'username': user.username,
@@ -115,8 +161,8 @@ async def handle_add_site(self, request):
         }
         with open(DB_FILE, 'w') as f:
             json.dump(data, f)
-
-    def hash_password(self, password: str, salt: str) -> str:
+            
+def hash_password(self, password: str, salt: str) -> str:
         return hashlib.pbkdf2_hmac(
             'sha256',
             password.encode('utf-8'),
