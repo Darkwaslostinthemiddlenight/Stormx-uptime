@@ -106,85 +106,31 @@ class UptimeMonitor:
             print(f"Error loading users: {e}")
             self.users = {}
 
-    def save_users(self):
-        try:
-            data = {
-                username: {
-                    'username': user.username,
-                    'password_hash': user.password_hash,
-                    'salt': user.salt,
-                    'monitors': [{
-                        'name': m.name,
-                        'url': m.url,
-                        'interval': m.interval,
-                        'paused': m.paused
-                    } for m in user.monitors],
-                    'status_data': user.status_data
-                }
-                for username, user in self.users.items()
-            }
-            with open(DB_FILE, 'w') as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            print(f"Error saving users: {e}")
-
-def load_users(self):
-        if os.path.exists(DB_FILE):
-            with open(DB_FILE, 'r') as f:
-                data = json.load(f)
-                self.users = {
-                    username: User(
-                        username=user['username'],
-                        password_hash=user['password_hash'],
-                        salt=user['salt'],
-                        monitors=[MonitoredSite(**m) for m in user.get('monitors', [])],
-                        status_data=user.get('status_data', {})
-                    )
-                    for username, user in data.items()
-                }
-
-def save_users(self):
-        data = {
-            username: {
-                'username': user.username,
-                'password_hash': user.password_hash,
-                'salt': user.salt,
-                'monitors': [{
-                    'name': m.name,
-                    'url': m.url,
-                    'interval': m.interval,
-                    'paused': m.paused
-                } for m in user.monitors],
-                'status_data': user.status_data
-            }
-            for username, user in self.users.items()
-        }
-        with open(DB_FILE, 'w') as f:
-            json.dump(data, f)
             
-def hash_password(self, password: str, salt: str) -> str:
-    return hashlib.pbkdf2_hmac(
-        'sha256',
-        password.encode('utf-8'),
-        salt.encode('utf-8'),
-        100000
-    ).hex()
 
-async def get_current_user(self, request) -> Optional[User]:
-    session = await get_session(request)
-    username = session.get('username')
-    return self.users.get(username) if username else None
+    def hash_password(self, password: str, salt: str) -> str:
+        return hashlib.pbkdf2_hmac(
+            'sha256',
+            password.encode('utf-8'),
+            salt.encode('utf-8'),
+            100000
+        ).hex()
 
-async def monitor_sites(self):
-    while True:
-        tasks = []
-        for user in self.users.values():
-            for site in user.monitors:
-                if not site.paused:
-                    tasks.append(self.check_site(user, site))
-        
-        await asyncio.gather(*tasks)
-        await asyncio.sleep(10)  # Check every 10 seconds
+    async def get_current_user(self, request) -> Optional[User]:
+        session = await get_session(request)
+        username = session.get('username')
+        return self.users.get(username) if username else None
+
+    async def monitor_sites(self):
+        while True:
+            tasks = []
+            for user in self.users.values():
+                for site in user.monitors:
+                    if not site.paused:
+                        tasks.append(self.check_site(user, site))
+            
+            await asyncio.gather(*tasks)
+            await asyncio.sleep(10)  # Check every 10 seconds
 
     async def check_site(self, user: User, site: MonitoredSite):
         try:
